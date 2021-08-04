@@ -13,6 +13,7 @@ import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.ReadableMapKeySetIterator;
 import com.microsoft.identity.client.AcquireTokenParameters;
 import com.microsoft.identity.client.AcquireTokenSilentParameters;
 import com.microsoft.identity.client.AuthenticationCallback;
@@ -24,14 +25,96 @@ import com.microsoft.identity.client.PublicClientApplication;
 import com.microsoft.identity.client.SilentAuthenticationCallback;
 import com.microsoft.identity.client.exception.MsalException;
 
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.Promise;
+import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactContextBaseJavaModule;
+import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableArray;
+import com.facebook.react.bridge.WritableMap;
+
 import java.io.File;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import java.io.ByteArrayInputStream;
+import org.json.*;
+
 public class RNMSALModule extends ReactContextBaseJavaModule {
     private IMultipleAccountPublicClientApplication publicClientApplication;
+
+     private static JSONArray convertAuthoritiesToJson(ReadableArray readableArray) throws JSONException {
+        boolean defaultbool = true;
+        JSONArray array = new JSONArray();
+        for (int i = 0; i < readableArray.size(); i++) {
+            JSONObject object = new JSONObject();
+            JSONObject audience = new JSONObject();
+            audience.put("type", "AzureADMyOrg");
+            audience.put("tenant_id", readableArray.getString(i).substring(readableArray.getString(i).lastIndexOf("/") + 1));
+            object.put("type","AAD");
+            object.put("audience", audience);
+            object.put("default",defaultbool);
+            if (defaultbool) {
+                defaultbool = false;
+            }
+            array.put(object);
+        }
+        return array;
+    }
+
+
+    private static JSONArray convertArrayToJson(ReadableArray readableArray) throws JSONException {
+        JSONArray array = new JSONArray();
+        for (int i = 0; i < readableArray.size(); i++) {
+            switch (readableArray.getType(i)) {
+                case Null:
+                    break;
+                case Boolean:
+                    array.put(readableArray.getBoolean(i));
+                    break;
+                case Number:
+                    array.put(readableArray.getDouble(i));
+                    break;
+                case String:
+                    array.put(readableArray.getString(i));
+                    break;
+                case Map:
+                    array.put(convertMapToJson(readableArray.getMap(i)));
+                    break;
+                case Array:
+                    array.put(convertArrayToJson(readableArray.getArray(i)));
+                    break;
+            }
+        }
+        return array;
+    }
+
+    private static JSONObject convertMapToJson(ReadableMap readableMap) throws JSONException {
+        JSONObject object = new JSONObject();
+        ReadableMapKeySetIterator iterator = readableMap.keySetIterator();
+        while (iterator.hasNextKey()) {
+            String key = iterator.nextKey();
+            switch (key) {
+                case "redirectUri":
+                    object.put("redirect_uri", readableMap.getString(key));
+                    break;
+                case "clientId":
+                    object.put("client_id", readableMap.getString(key));
+                    break;
+                case "knownAuthorities":
+                    object.put("authorities", convertAuthoritiesToJson(readableMap.getArray(key)));
+                    break;
+            }
+        }
+        object.put("authorization_user_agent", "DEFAULT");
+        object.put("broker_redirect_uri_registered", true);
+        object.put("account_mode", "MULTIPLE");
+        return object;
+    }
 
     public RNMSALModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -43,6 +126,29 @@ public class RNMSALModule extends ReactContextBaseJavaModule {
         return "RNMSAL";
     }
 
+    @ReactMethod
+    public void createPublicClientApplication(ReadableMap params, Promise promise) {
+        ReactApplicationContext context = getReactApplicationContext();
+        try {
+            JSONObject msalConfig = RNMSALModule.convertMapToJson(params.getMap("auth"));
+            File file = File.createTempFile("RNMSAL_msal_config", ".tmp");
+            file.deleteOnExit();
+
+            System.out.println(msalConfig.toString());
+
+            InputStream is = new ByteArrayInputStream(msalConfig.toString().getBytes("UTF-8"));
+            FileUtils.copyInputStreamToFile(is, file);
+            publicClientApplication =
+                    PublicClientApplication.createMultipleAccountPublicClientApplication(
+                            context, file);
+            promise.resolve(null);
+        } catch (Exception e) {
+            promise.reject(e.toString());
+        }
+    }
+
+    /*
+    // Original version
     @ReactMethod
     public void createPublicClientApplication(ReadableMap params, Promise promise) {
         ReactApplicationContext context = getReactApplicationContext();
@@ -59,6 +165,7 @@ public class RNMSALModule extends ReactContextBaseJavaModule {
             promise.reject(e);
         }
     }
+    */
 
     @ReactMethod
     public void acquireToken(ReadableMap params, Promise promise) {
