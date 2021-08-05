@@ -111,7 +111,7 @@ public class RNMSALModule extends ReactContextBaseJavaModule {
             }
         }
         object.put("authorization_user_agent", "DEFAULT");
-        object.put("broker_redirect_uri_registered", true);
+        object.put("broker_redirect_uri_registered", false);
         object.put("account_mode", "MULTIPLE");
         return object;
     }
