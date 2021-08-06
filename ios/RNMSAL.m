@@ -196,11 +196,15 @@ RCT_REMAP_METHOD(getAccount,
         NSError *msalError = nil;
         MSALAccount *account = [application accountForIdentifier:accountIdentifier error:&msalError];
 
-        if (msalError) {
-            @throw msalError;
-        }
+        if(account == nil) {
+            reject([[NSString alloc] initWithFormat:@"%d", (int)500], @"account is nil", nil);
+        } else {
+            if (msalError) {
+                @throw msalError;
+            }
 
-        resolve([self MSALAccountToDictionary:account]);
+            resolve([self MSALAccountToDictionary:account]);
+        }
     } @catch(NSError *error) {
         reject([[NSString alloc] initWithFormat:@"%d", (int)error.code], error.description, error);
     }
